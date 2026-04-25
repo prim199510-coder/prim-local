@@ -1,0 +1,298 @@
+<?php
+include './../includes/auth.php';
+include './../includes/db.php';
+$conn = getDbConnection();
+
+$success = "";
+$error = "";
+$pageTitle = "New Blog";
+
+$id = isset($_GET['id']) ? intval($_GET['id']) : -1;
+
+// Default blog structure
+$blogData = [
+    'cat_id' => '',
+    'title' => '',
+    'description' => '',
+    'slug' => '',
+    'content' => '',
+    'tags' => '',
+    'meta_title' => '',
+    'meta_desc' => '',
+    'meta_keywords' => '',
+    'banner_images' => '',
+    'published' => 0,
+    'parent_id' => -1
+];
+
+// Function: check duplicate
+function blogExists($conn, $cat_id, $title, $slug, $exclude_id = 0)
+{
+    $stmt = $conn->prepare("
+        SELECT id 
+        FROM blogs 
+        WHERE cat_id = ?
+            AND (title = ? OR slug = ?)
+            AND id NOT IN (
+                ?,                          
+                COALESCE((SELECT parent_id FROM blogs WHERE id = ?), -1),
+                COALESCE((SELECT id FROM blogs WHERE parent_id = ? LIMIT 1), -1)
+            )
+        LIMIT 1
+    ");
+    $stmt->bind_param("issiii", $cat_id, $title, $slug, $exclude_id, $exclude_id, $exclude_id);
+    $stmt->execute();
+    $exists = $stmt->get_result()->num_rows > 0;
+    $stmt->close();
+    return $exists;
+}
+
+// Load blog if ID given
+if ($id >= 0) {
+    $stmt = $conn->prepare("SELECT * FROM blogs WHERE id=?");
+    $stmt->bind_param("i", $id);
+    $stmt->execute();
+    $res = $stmt->get_result();
+    if ($res->num_rows > 0) {
+        $blogData = $res->fetch_assoc();
+        $pageTitle = ($blogData['published'] == 1) ? "Edit Blog" : "Edit Blog (Draft)";
+    }
+    $stmt->close();
+
+    if ($blogData['published'] == 1) {
+        $draftStmt = $conn->prepare("SELECT * FROM blogs WHERE parent_id=? AND published=0 LIMIT 1");
+        $draftStmt->bind_param("i", $id);
+        $draftStmt->execute();
+        $draftRes = $draftStmt->get_result();
+        if ($draftRes->num_rows > 0) {
+            $blogData = $draftRes->fetch_assoc();
+            $pageTitle = "Edit Blog (Draft)";
+        }
+        $draftStmt->close();
+    }
+}
+
+// Handle category add (AJAX)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['new_category'])) {
+    $newCat = trim($_POST['new_category']);
+    if ($newCat != '') {
+        $exists = $conn->query("SELECT id FROM categories WHERE name='" . $conn->real_escape_string($newCat) . "'");
+        if ($exists->num_rows == 0) {
+            $conn->query("INSERT INTO categories (name) VALUES ('" . $conn->real_escape_string($newCat) . "')");
+            echo json_encode(['success' => true, 'id' => $conn->insert_id, 'name' => $newCat]);
+        } else {
+            $row = $exists->fetch_assoc();
+            echo json_encode(['success' => true, 'id' => $row['id'], 'name' => $newCat]);
+        }
+    } else {
+        echo json_encode(['success' => false, 'message' => 'Invalid name']);
+    }
+    exit;
+}
+
+// Save logic
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['new_category'])) {
+    $cat_id = intval($_POST['category_id']);
+    $title = trim($_POST['title']);
+    $description = trim($_POST['description']);
+    $slug = trim($_POST['slug']);
+    $content = $_POST['content'];
+    $tags = trim($_POST['tags']);
+    $meta_title = trim($_POST['meta_title']);
+    $meta_desc = trim($_POST['meta_description']);
+    $meta_keywords = trim($_POST['meta_keywords']);
+
+    $bannerPath = $blogData['banner_images'] ?? '';
+    if (!empty($_FILES['banner_image']['name'])) {
+        $uploadDir = './../uploads/blogs/';
+        if (!is_dir($uploadDir)) mkdir($uploadDir, 0777, true);
+        $fileName = time() . '_' . basename($_FILES['banner_image']['name']);
+        $target = $uploadDir . $fileName;
+        if (move_uploaded_file($_FILES['banner_image']['tmp_name'], $target)) {
+            $bannerPath = 'uploads/blogs/' . $fileName;
+        } else {
+            $error = "Banner upload failed.";
+        }
+    }
+
+    if ($title && $slug && $content) {
+        if (blogExists($conn, $cat_id, $title, $slug, $id)) {
+            $error = "URL or title already exists in this category.";
+        } else {
+            // CASE HANDLING
+            if (($id <= 0) || ($blogData['parent_id'] == -1 && $blogData['published'] == 0)) {
+                if ($id > 0) {
+                    $stmt = $conn->prepare("UPDATE blogs SET cat_id=?, title=?, description=?, slug=?, content=?, tags=?, meta_title=?, meta_desc=?, meta_keywords=?, banner_images=?, updated_at=NOW() WHERE id=?");
+                    $stmt->bind_param("isssssssssi", $cat_id, $title, $description, $slug, $content, $tags, $meta_title, $meta_desc, $meta_keywords, $bannerPath, $id);
+                    $stmt->execute();
+                    $stmt->close();
+                    $redirectId = $id;
+                    $success = "Draft updated successfully.";
+                } else {
+                    $stmt = $conn->prepare("INSERT INTO blogs (cat_id,title,description,slug,content,tags,meta_title,meta_desc,meta_keywords,banner_images,published,parent_id,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,0,-1,NOW())");
+                    $stmt->bind_param("isssssssss", $cat_id, $title, $description, $slug, $content, $tags, $meta_title, $meta_desc, $meta_keywords, $bannerPath);
+                    $stmt->execute();
+                    $redirectId = $conn->insert_id;
+                    $stmt->close();
+                    $success = "New draft created.";
+                }
+            } else if ($blogData['published'] == 1 && $blogData['parent_id'] == -1) {
+                $originalId = $id;
+                $check = $conn->prepare("SELECT id FROM blogs WHERE parent_id=? AND published=0 LIMIT 1");
+                $check->bind_param("i", $originalId);
+                $check->execute();
+                $draftRes = $check->get_result();
+                if ($draftRes->num_rows > 0) {
+                    $draft = $draftRes->fetch_assoc();
+                    $draftId = $draft['id'];
+                    $stmt = $conn->prepare("UPDATE blogs SET cat_id=?, title=?, description=?, slug=?, content=?, tags=?, meta_title=?, meta_desc=?, meta_keywords=?, banner_images=?, updated_at=NOW() WHERE id=?");
+                    $stmt->bind_param("isssssssssi", $cat_id, $title, $description, $slug, $content, $tags, $meta_title, $meta_desc, $meta_keywords, $bannerPath, $draftId);
+                    $stmt->execute();
+                    $stmt->close();
+                    $redirectId = $draftId;
+                    $success = "Draft updated.";
+                } else {
+                    $stmt = $conn->prepare("INSERT INTO blogs (cat_id,title,description,slug,content,tags,meta_title,meta_desc,meta_keywords,banner_images,published,parent_id,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,0,?,NOW())");
+                    $stmt->bind_param("isssssssssi", $cat_id, $title, $description, $slug, $content, $tags, $meta_title, $meta_desc, $meta_keywords, $bannerPath, $originalId);
+                    $stmt->execute();
+                    $redirectId = $conn->insert_id;
+                    $stmt->close();
+                    $success = "Draft created.";
+                }
+            } else if ($blogData['published'] == 0 && $blogData['parent_id'] != -1) {
+                $stmt = $conn->prepare("UPDATE blogs SET cat_id=?, title=?, description=?, slug=?, content=?, tags=?, meta_title=?, meta_desc=?, meta_keywords=?, banner_images=?, updated_at=NOW() WHERE id=?");
+                $stmt->bind_param("isssssssssi", $cat_id, $title, $description, $slug, $content, $tags, $meta_title, $meta_desc, $meta_keywords, $bannerPath, $id);
+                $stmt->execute();
+                $stmt->close();
+                $redirectId = $id;
+                $success = "Draft updated.";
+            }
+
+            header("Location: blog_list.php?new_id=" . $redirectId);
+            exit;
+        }
+    } else {
+        $error = "Please fill required fields.";
+    }
+}
+
+// Preserve input if validation failed
+if (!empty($error) && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    foreach ($blogData as $key => $val) {
+        if (isset($_POST[$key])) $blogData[$key] = htmlspecialchars($_POST[$key], ENT_QUOTES);
+    }
+}
+
+// categories
+$categories = $conn->query("SELECT id,name FROM categories ORDER BY name ASC");
+
+include '_header.php';
+?>
+
+<main class="p-6 mt-16 space-y-4">
+    <div class="wrapper">
+    <div class="flex justify-between items-center">
+        <h2 class="text-2xl font-bold"></h2>
+        <div class="space-x-3">
+            <a href="blog_list.php" class="bg-gray-500 text-white font-medium px-4 py-2 rounded"><i class="fa-solid fa-arrow-left"></i> Back</a>
+        </div>
+    </div>
+
+    <section class="bg-white shadow rounded-lg p-5">
+        <?php if ($success): ?>
+            <p class="bg-green-100 text-green-700 p-3 mb-4 rounded"><?= htmlspecialchars($success) ?></p>
+        <?php elseif ($error): ?>
+            <p class="bg-red-100 text-center text-red-700 p-3 mb-4 rounded"><?= htmlspecialchars($error) ?></p>
+        <?php endif; ?>
+
+        <form method="POST" enctype="multipart/form-data">
+            <label class="block font-semibold mb-1">Category</label>
+            <select id="categorySelect" name="category_id" class="border px-3 py-2 rounded mb-4 w-full" required>
+                <option value="">Select Blog Category</option>
+                <?php while ($cat = $categories->fetch_assoc()): ?>
+                    <option value="<?= $cat['id'] ?>" <?= ($cat['id'] == $blogData['cat_id']) ? 'selected' : '' ?>>
+                        <?= htmlspecialchars($cat['name']) ?>
+                    </option>
+                <?php endwhile; ?>
+            </select>
+
+            <label class="block mb-2 font-semibold">Title</label>
+            <input type="text" name="title" id="titleField" class="w-full p-2 border rounded mb-4"
+                value="<?= htmlspecialchars($blogData['title']) ?>" required>
+
+            <label class="block mb-2 font-semibold">Description</label>
+            <input type="text" name="description" class="w-full p-2 border rounded mb-4"
+                value="<?= htmlspecialchars($blogData['description']) ?>">
+
+            <label class="block mb-2 font-semibold">URL</label>
+            <input type="text" name="slug" id="slugField" class="w-full p-2 border rounded mb-4"
+                value="<?= htmlspecialchars($blogData['slug']) ?>" required>
+
+            <label class="block mb-2 font-semibold">Content</label>
+            <textarea name="content" id="editor"><?= htmlspecialchars_decode($blogData['content'], ENT_QUOTES) ?></textarea>
+
+            <label class="block mt-4 mb-2 font-semibold">Tags (comma separated)</label>
+            <input type="text" name="tags" class="w-full border p-2 rounded mb-4"
+                value="<?= htmlspecialchars($blogData['tags']) ?>">
+
+            <label class="block mb-2 font-semibold">Upload Banner Image</label>
+            <?php if (!empty($blogData['banner_images'])): ?>
+                <img src="../<?= htmlspecialchars($blogData['banner_images']) ?>" alt="Banner"
+                    class="w-32 h-32 object-cover rounded mb-2 border">
+            <?php endif; ?>
+            <input type="file" name="banner_image" class="mb-4">
+
+            <h3 class="font-semibold text-lg border-b pb-2 mt-6 mb-4">SEO Settings</h3>
+
+            <label class="block mb-1">Meta Title</label>
+            <input type="text" name="meta_title" class="w-full border p-2 rounded mb-3"
+                value="<?= htmlspecialchars($blogData['meta_title']) ?>">
+
+            <label class="block mb-1">Meta Description</label>
+            <textarea name="meta_description" rows="2" class="w-full border p-2 rounded mb-3"><?= htmlspecialchars($blogData['meta_desc']) ?></textarea>
+
+            <label class="block mb-1 font-semibold">Meta Keywords</label>
+            <input type="text" name="meta_keywords" class="w-full border p-2 rounded mb-3"
+                value="<?= htmlspecialchars($blogData['meta_keywords']) ?>">
+
+            <div class="mt-6 row">
+                <button type="submit" class="bg-primary font-semibold uppercase text-white px-4 py-2 rounded w-auto mr-4">
+                    <?= ($id > 0) ? 'Update Blog' : 'Save Blog' ?>
+                </button>
+                <button type="button" class="bg-gray-500 font-semibold uppercase text-white px-4 py-2 rounded w-auto" onclick="window.location.href='blog_list.php'">
+                    Cancel
+                </button>
+            </div>
+        </form>
+    </section>
+</div>
+</main>
+
+<script src="https://cdn.ckeditor.com/4.22.1/standard/ckeditor.js"></script>
+<script>CKEDITOR.replace('editor');</script>
+
+<!-- ✅ AUTO SLUG SCRIPT -->
+<script>
+const titleInput = document.getElementById('titleField');
+const slugInput = document.getElementById('slugField');
+let slugManuallyEdited = false;
+
+// If user edits slug manually, stop auto-update
+slugInput.addEventListener('input', () => slugManuallyEdited = true);
+
+// Auto-update slug when title changes (for new/draft blogs)
+titleInput.addEventListener('input', function () {
+    const isDraft = <?= ($id <= 0 || $blogData['published'] == 0) ? 'true' : 'false' ?>;
+    if (!slugManuallyEdited && isDraft) {
+        let slug = this.value
+            .toLowerCase()
+            .trim()
+            .replace(/[^\w\s-]/g, '')   // remove special chars
+            .replace(/\s+/g, '-')       // replace spaces with dashes
+            .replace(/-+/g, '-');       // remove duplicate dashes
+        slugInput.value = slug;
+    }
+});
+</script>
+
+<?php include '_footer.php'; ?>

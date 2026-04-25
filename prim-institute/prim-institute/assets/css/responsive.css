@@ -1,0 +1,208 @@
+
+
+@media only screen and (max-width: 991px) {
+  .hero-content h1 {
+    font-size: 50px;
+  }
+
+  .common-title h4 {
+    font-size: 30px;
+  }
+
+  .navbar-nav {
+    margin-bottom: 250px;
+  }
+
+  .navbar-light .navbar-nav .nav-item .nav-link {
+    padding: 5px 15px;
+  }
+
+
+  .navbar-collapse {
+    margin-bottom: 25px;
+  }
+
+  .common-heading {
+    top: 78%;
+  }
+}
+
+@media only screen and (max-width: 767px) {
+  .hero-content h1 {
+    font-size: 40px;
+  }
+
+  .hero-content p br {
+    display: none;
+  }
+
+  .common-title {
+    margin-bottom: 30px;
+  }
+
+  .common-title h4 {
+    font-size: 26px;
+  }
+
+  #home-aboutus-sec {
+    margin-bottom: 60px;
+    padding: 80px 0 0 0;
+    /* margin-bottom: 80px; */
+    /* padding: 10px; */
+  }
+
+  #journey-sec {
+    margin-bottom: 60px;
+  }
+
+  #famous-courses-sec {
+    margin-bottom: 60px;
+  }
+
+  #reachus-sec {
+    margin-bottom: 60px;
+  }
+
+  #about-section {
+    margin-top: 30px;
+  }
+
+  .common-title p br {
+    display: none;
+  }
+
+  .test-icon {
+    width: 300%;
+  }
+
+  .footer-cu-sec-align,
+  .footer-Links-sec-align {
+    justify-content: start;
+  }
+
+  #about-sec {
+    margin-bottom: 60px;
+  }
+
+  #gallery-sec {
+    margin-bottom: 60px;
+    ;
+  }
+
+  .footer-aboutus-sec,
+  .footer-Links-sec,
+  .footer-cu-sec {
+    margin-bottom: 15px;
+  }
+}
+
+@media only screen and (max-width: 575px) {}
+
+header {
+  margin-bottom: 40px;
+}
+
+.hero-content h1 {
+  font-size: 24px;
+}
+
+.hero-content h1 br {
+  display: none;
+}
+
+img.whitelogo {
+  width: 250px;
+}
+
+.hero-content p {
+  font-size: 14px;
+}
+
+.common-title {
+  margin-bottom: 20px;
+}
+
+#home-aboutus-bottom-sec {
+  padding-top: 40px;
+}
+
+#journey-sec {
+  margin-bottom: 40px;
+  padding: 40px 0px;
+}
+
+#reachus-sec .content-sec p {
+  font-size: 14px;
+}
+
+#reachus-sec .content-sec p br {
+  display: none;
+}
+
+#reachus-sec .content-sec h2 {
+  font-size: 24px;
+}
+
+.common-title h4 {
+  font-size: 24px;
+}
+
+
+
+#about-section .right-sec {
+  padding: 0px 14px !important;
+}
+
+#gallery-sec {
+  margin-bottom: 40px;
+}
+
+.hero-content {
+  top: 60%;
+}
+
+#home-aboutus-sec {
+  margin-bottom: 30px;
+  padding: 10px;
+  margin-top: 60px;
+
+}
+
+.common-title p {
+  font-size: 14px;
+}
+
+#reachus-sec .content-sec p {
+  text-align: justify;
+}
+
+#about-sec .content-box {
+  margin-bottom: 16px;
+}
+
+
+@media only screen and (max-width: 450px) {
+
+  /* footer---------------- */
+  .social-links {
+    display: flex;
+    align-items: center;
+    margin-bottom: 14px;
+    gap: 6px;
+    margin-left: 17px;
+  }
+
+  .copy-rights p {
+    text-align: center;
+  }
+
+  .footer-logo {
+    display: block;
+    margin: 10px auto;
+    width: 35%;
+    /* keep the desired width */
+    text-align: center;
+    /* optional, for child elements if any */
+  }
+}
+

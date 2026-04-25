@@ -1,0 +1,31 @@
+RewriteEngine On
+RewriteBase /blog/
+
+# 1️⃣ Root redirect to public/index.php
+RewriteRule ^$ public/index.php [L]
+
+# 2️⃣ /index.php → /public/index.php
+RewriteRule ^index\.php$ public/index.php [L]
+
+# 3️⃣ Serve existing files in /public/ directly (AJAX, PHP scripts)
+RewriteCond %{DOCUMENT_ROOT}/blog/public/%{REQUEST_URI} -f
+RewriteRule ^(.*)$ public/$1 [L]
+
+# 4️⃣ Blog URLs: /category/blog
+# Skip .php requests
+RewriteCond %{REQUEST_URI} !\.php$ [NC]
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^([^/]+)/([^/]+)/?$ public/showblog.php?slug=$1/$2 [L,QSA]
+
+# 5️⃣ Category URLs: /category
+# Skip .php requests
+RewriteCond %{REQUEST_URI} !\.php$ [NC]
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^([^/]+)/?$ public/showcategory.php?slug=$1 [L,QSA]
+
+# 6️⃣ Fallback: everything else to public/
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^(.*)$ public/$1 [L]
